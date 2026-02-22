@@ -2,16 +2,12 @@ name: Validate New Issue
 
 on:
   workflow_call:
-  # issues:
-    # types: [opened, reopened, edited]
-    # This listens for events on the issue body itself,
-    # which is what the bot checks for validation.
-    # This is not for handling comments.
+  # Called by submission-enforcement.yml after cooldown clears,
+  # or directly on issue edits. The enforcement workflow handles
+  # missing-label and informal submission detection, so this
+  # workflow only validates properly-submitted resources.
 
 jobs:
-  # ============================================================
-  # JOB 1: Validate properly-submitted resource recommendations
-  # ============================================================
   validate-resource:
     name: Validate Resource Submission
     # Only run on issues with the resource-submission label
@@ -50,18 +46,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          # Run validation and capture only the last line (JSON output)
-          # The script now outputs compact JSON on the last line
           python -m scripts.resources.parse_issue_form --validate 2>&1 | tail -n 1 > validation_result.json
 
-          # Display validation status
           if grep -q '"valid": true' validation_result.json; then
             echo "Validation passed!"
           else
             echo "Validation failed!"
           fi
 
-          # Show the result for debugging (pretty print it)
           echo "=== Validation Result ==="
           python -m json.tool validation_result.json || cat validation_result.json
 
@@ -73,14 +65,12 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            // Get all comments
             const comments = await github.rest.issues.listComments({
               owner,
               repo,
               issue_number,
             });
 
-            // Find and delete previous validation comments by this bot
             for (const comment of comments.data) {
               if (comment.user.type === 'Bot' && comment.body.includes('## 🤖 Validation Results')) {
                 await github.rest.issues.deleteComment({
@@ -146,7 +136,6 @@ jobs:
             const validation_result = JSON.parse(fs.readFileSync('validation_result.json', 'utf8'));
             const validation_passed = validation_result.valid;
 
-            // Get current labels
             const { data: issue } = await github.rest.issues.get({
               owner,
               repo,
@@ -155,26 +144,22 @@ jobs:
 
             let labels = issue.labels.map(label => label.name);
 
-            // Remove validation-related labels
             labels = labels.filter(label =>
               label !== 'validation-passed' &&
               label !== 'validation-failed' &&
               label !== 'pending-validation'
             );
 
-            // If validation passed and changes were previously requested, remove that label
             if (validation_passed && labels.includes('changes-requested')) {
               labels = labels.filter(label => label !== 'changes-requested');
             }
 
-            // Add appropriate label
             if (validation_passed) {
               labels.push('validation-passed');
             } else {
               labels.push('validation-failed');
             }
 
-            // Update labels
             await github.rest.issues.setLabels({
               owner,
               repo,
@@ -192,7 +177,6 @@ jobs:
             const issue_number = context.issue.number;
             const current_validation_status = validation_result.valid;
 
-            // Find all comments to check notification history and find maintainer
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -200,7 +184,6 @@ jobs:
               per_page: 100
             });
 
-            // Find the most recent "Changes Requested by @" comment to get maintainer
             let maintainer = null;
             let changesRequestedTime = null;
             for (let i = comments.data.length - 1; i >= 0; i--) {
@@ -215,20 +198,16 @@ jobs:
 
             if (!maintainer) return;
 
-            // Check for previous notifications and their metadata
             let lastNotificationTime = null;
             let lastNotifiedStatus = null;
             let hasNotifiedAfterRequest = false;
 
             for (const comment of comments.data) {
-              // Look for our notification comments
               if (comment.body.includes('## 📝 Issue Updated') && comment.user.type === 'Bot') {
-                // Check if this notification came after the changes were requested
                 const commentTime = new Date(comment.created_at);
                 if (commentTime > changesRequestedTime) {
                   hasNotifiedAfterRequest = true;
 
-                  // Extract metadata from hidden comment
                   const metaMatch = comment.body.match(/<!-- notification-meta: status=(\w+) -->/);
                   if (metaMatch) {
                     lastNotifiedStatus = metaMatch[1] === 'true';
@@ -241,16 +220,13 @@ jobs:
               }
             }
 
-            // Determine if we should send a notification
             let shouldNotify = false;
             let notificationReason = '';
 
             if (!hasNotifiedAfterRequest) {
-              // First edit after changes requested - always notify
               shouldNotify = true;
               notificationReason = 'first edit after changes requested';
             } else if (lastNotifiedStatus !== null && lastNotifiedStatus !== current_validation_status) {
-              // Validation status changed - notify
               shouldNotify = true;
               notificationReason = 'validation status changed';
             }
@@ -267,7 +243,6 @@ jobs:
                 notification_body += `The submitter may need additional guidance to fix the remaining issues.`;
               }
 
-              // Add hidden metadata for tracking
               notification_body += `\n\n<!-- notification-meta: status=${current_validation_status} -->`;
 
               await github.rest.issues.createComment({
@@ -286,148 +261,3 @@ jobs:
         if: always()
         run: |
           rm -f validation_result.json
-
-  # ============================================================
-  # JOB 2: Detect informal submissions that bypassed the template
-  # ============================================================
-  detect-informal:
-    name: Detect Informal Submission
-    runs-on: ubuntu-latest
-    # Only run on NEW issues that DON'T have the resource-submission label
-    if: |
-      github.event.action == 'opened' && !contains(github.event.issue.labels.*.name, 'resource-submission')
-
-    permissions:
-      issues: write
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            pyproject.toml
-            scripts/__init__.py
-            scripts/resources/__init__.py
-            scripts/resources/detect_informal_submission.py
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Detect informal submission
-        id: detect
-        env:
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python -m scripts.resources.detect_informal_submission
-
-      # ---- Action: warn (medium confidence) ----
-      - name: Add needs-template label (warn)
-        if: steps.detect.outputs.action == 'warn'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              labels: ['needs-template']
-            });
-
-      - name: Post gentle warning comment (warn)
-        if: steps.detect.outputs.action == 'warn'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const score = '${{ steps.detect.outputs.confidence }}';
-            const templateUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new?template=recommend-resource.yml`;
-
-            const body = [
-              '## 💡 Did you mean to submit a resource recommendation?',
-              '',
-              'This issue looks like it might be recommending a resource for the list.',
-              '',
-              `If you **are** trying to recommend a resource, please use our [official submission template](${templateUrl}) instead. The template ensures:`,
-              '- All required information is collected upfront',
-              '- Automated validation can process your submission',
-              '',
-              'If this is **not** a resource recommendation (e.g., it\'s a bug report, question, or feature request), please ignore this message.',
-              '',
-              '---',
-              `*This is an automated message.`
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
-
-      # ---- Action: close (high confidence) ----
-      - name: Add needs-template label (close)
-        if: steps.detect.outputs.action == 'close'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              labels: ['needs-template']
-            });
-
-      - name: Post firm warning comment (close)
-        if: steps.detect.outputs.action == 'close'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const score = '${{ steps.detect.outputs.confidence }}';
-            const templateUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new?template=recommend-resource.yml`;
-
-            const body = [
-              '## ⚠️ This issue appears to be a resource recommendation',
-              '',
-              'Thank you for your interest in contributing to Awesome Claude Code!',
-              '',
-              `However, resource recommendations **must** be submitted using our [official issue template](${templateUrl}) to be processed correctly.`,
-              '',
-              '**Why this matters:**',
-              '- The template ensures all required information is collected',
-              '- Automated validation can only process properly-formatted submissions',
-              '- Missing fields will cause your submission to be skipped',
-              '',
-              '**Next steps:**',
-              '1. Make sure you have read the CONTRIBUTING.md document.',
-              `2. [Click here to submit using the correct template](${templateUrl})`,
-              '3. Fill out all required fields',
-              '',
-              'If this issue is **not** a resource recommendation, please comment below and we\'ll reopen it.',
-              '',
-              '---',
-              '*This issue has been automatically closed.'
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
-
-      - name: Close issue (close)
-        if: steps.detect.outputs.action == 'close'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              state: 'closed',
-              state_reason: 'not_planned'
-            });

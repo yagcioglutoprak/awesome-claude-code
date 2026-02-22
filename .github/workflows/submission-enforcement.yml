@@ -92,6 +92,10 @@ jobs:
                 {
                   role: "user",
                   content: ("PR Title: " + $title + "\n\nPR Body:\n" + $body + "\n\nChanged files:\n" + $files)
+                },
+                {
+                  role: "assistant",
+                  content: "{"
                 }
               ]
             }')
@@ -107,7 +111,10 @@ jobs:
             exit 0
           }
 
-          TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          # Prepend "{" (from assistant prefill) and strip any markdown fences
+          RAW=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          TEXT="{${RAW}"
+          TEXT=$(echo "$TEXT" | sed 's/^```json//;s/^```//;s/```$//' | tr -d '\n')
           echo "Claude response: $TEXT"
 
           CLASSIFICATION=$(echo "$TEXT" | jq -r '.classification // "error"')
