@@ -181,13 +181,13 @@ Claude Code is a CLI-based coding assistant from [Anthropic](https://www.anthrop
 
 ### Usage Monitors
 
+- [AIQuotaBar](https://github.com/yagcioglutoprak/AIQuotaBar) by [yagcioglutoprak](https://github.com/yagcioglutoprak) - macOS menu bar app showing Claude.ai session and weekly usage limits in real-time. Zero setup, reads local browser cookies.
 - [CC Usage](https://github.com/ryoppippi/ccusage) by [ryoppippi](https://github.com/ryoppippi) - Handy CLI tool for managing and analyzing Claude Code usage, based on analyzing local Claude Code logs. Presents a nice dashboard regarding cost information, token consumption, etc.
 - [ccflare](https://github.com/snipeship/ccflare) by [snipeship](https://github.com/snipeship) - Claude Code usage dashboard with a web-UI that would put Tableau to shame. Thoroughly comprehensive metrics, frictionless setup, detailed logging, really really nice UI.
 - [ccflare -> **better-ccflare**](https://github.com/tombii/better-ccflare/) by [tombii](https://github.com/tombii) - A well-maintained and feature-enhanced fork of the glorious `ccflare` usage dashboard by @snipeship (which at the time of writing has not had an update in a few months). `better-ccflare` builds on this foundation with some performance enhancements, extended provider support, bug fixes, Docker deployment, and more.
 - [Claude Code Usage Monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor) by [Maciek-roboblog](https://github.com/Maciek-roboblog) - A real-time terminal-based tool for monitoring Claude Code token usage. It shows live token consumption, burn rate, and predictions for token depletion. Features include visual progress bars, session-aware analytics, and support for multiple subscription plans.
 - [Claudex](https://github.com/kunwar-shah/claudex) by [Kunwar Shah](https://github.com/kunwar-shah) - Claudex - A web-based browser for exploring your Claude Code conversation history across projects. Indexes your codebase for full-text search. Nice, easy-to-navigate UI. Simple dashboard interface for high-level analytics, and multiple export options as well. (And completely local w/ no telemetry!).
 - [viberank](https://github.com/sculptdotfun/viberank) by [nikshepsvn](https://github.com/nikshepsvn) - A community-driven leaderboard tool that enables developers to visualize, track, and compete based on their Claude Code usage statistics. It features robust data analytics, GitHub OAuth, data validation, and user-friendly CLI/web submission methods.
-- [ClaudeUsageBar](https://github.com/yagcioglutoprak/ClaudeUsageBar) by [yagcioglutoprak](https://github.com/yagcioglutoprak) - macOS menu bar app that shows your Claude.ai session (5-hour) and weekly usage limits in real-time. Color-coded green/yellow/red, macOS notifications at 80%/95%, zero setup (reads local browser cookies from Chrome/Arc/Firefox/Safari/Brave/Edge), no Electron, one-command install.
 
 ### Orchestrators
 
